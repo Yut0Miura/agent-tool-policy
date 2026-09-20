@@ -1,0 +1,51 @@
+version: 1
+
+default: deny
+
+budget:
+  max_calls: 6
+
+tools:
+  search_docs:
+    effect: allow
+    max_calls: 3
+    arguments:
+      query:
+        type: string
+        required: true
+        max_length: 200
+
+      limit:
+        type: number
+        required: false
+        min: 1
+        max: 10
+
+  read_resource:
+    effect: allow
+    max_calls: 2
+    arguments:
+      resource:
+        type: string
+        required: true
+        prefix: "docs:"
+        max_length: 128
+
+  service_status:
+    effect: allow
+    max_calls: 2
+    arguments:
+      service:
+        type: string
+        required: true
+        enum:
+          - api
+          - worker
+          - database
+
+      verbose:
+        type: boolean
+        required: false
+
+  delete_resource:
+    effect: deny

@@ -1,0 +1,5 @@
+{"tool":"search_docs","arguments":{"query":"deployment guide","limit":5}}
+{"tool":"read_resource","arguments":{"resource":"docs:deployment"}}
+{"tool":"service_status","arguments":{"service":"api","verbose":true}}
+{"tool":"delete_resource","arguments":{}}
+{"tool":"unknown_tool","arguments":{}}
