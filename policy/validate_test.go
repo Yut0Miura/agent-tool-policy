@@ -174,11 +174,14 @@ func TestValidateRejects(t *testing.T) {
 	}
 }
 
-func TestValidateAcceptsEnumNull(t *testing.T) {
-	// enum: null is treated as no configured enum.
-	engine := mustLoad(t, policyWithArgument("      q:\n        type: string\n        enum: null\n"))
-	if enum := engine.tools["search_docs"].arguments["q"].enum; enum != nil {
-		t.Errorf("enum = %v, want nil", enum)
+func TestValidateRejectsEnumNull(t *testing.T) {
+	// An explicit enum: null is refused; an absent enum means no enum.
+	_, err := Load([]byte(policyWithArgument("      q:\n        type: string\n        enum: null\n")))
+	if err == nil {
+		t.Fatal("Load() error = nil, want error")
+	}
+	if want := "policy: explicit null values are not supported"; !strings.Contains(err.Error(), want) {
+		t.Errorf("Load() error = %q, want it to contain %q", err, want)
 	}
 }
 

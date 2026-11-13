@@ -11,7 +11,8 @@ import (
 
 // checkYAMLStructure enforces the structural rules of the policy format
 // before any value is decoded: exactly one document, no anchors, no aliases,
-// no merge keys and no duplicate mapping key at any level.
+// no merge keys, no explicit null values and no duplicate mapping key at any
+// level.
 func checkYAMLStructure(data []byte) error {
 	decoder := yaml.NewDecoder(bytes.NewReader(data))
 
@@ -36,6 +37,10 @@ func checkYAMLStructure(data []byte) error {
 }
 
 func checkNode(node *yaml.Node) error {
+	if node.Tag == "!!null" {
+		return errors.New("policy: explicit null values are not supported")
+	}
+
 	if node.Kind == yaml.AliasNode || node.Anchor != "" {
 		return errors.New("policy: YAML anchors and aliases are not supported")
 	}

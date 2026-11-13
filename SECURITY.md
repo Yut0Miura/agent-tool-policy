@@ -46,7 +46,7 @@ Numeric comparison is defined only inside the exactly representable domain `abs(
 
 ## Input Bounds
 
-A policy file is at most 1 MiB and must be a single YAML document without anchors, aliases, merge keys, duplicate keys or unknown fields. A CLI input line is at most 1 MiB, must hold exactly one JSON value, may nest at most 64 levels and may not repeat an object member at any depth. Duplicate keys are rejected rather than resolved, so no input can mean one thing to the parser and another to a reader.
+A policy file is at most 1 MiB and must be a single YAML document without anchors, aliases, merge keys, duplicate keys, explicit `null` values or unknown fields. An explicit `null` is rejected rather than decoded as a zero value, so it cannot silently turn a constraint off. A CLI input line is at most 1 MiB, must hold exactly one JSON value, may nest at most 64 levels and may not repeat an object member at any depth. Duplicate keys are rejected rather than resolved, so no input can mean one thing to the parser and another to a reader.
 
 ## Unsupported Security Boundaries
 

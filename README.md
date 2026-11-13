@@ -79,7 +79,7 @@ This is not:
 - String constraints (`prefix`, `enum`, `max_length`), numeric bounds (`min`, `max`) and boolean arguments.
 - Finite global and per-tool authorization budgets, enforced atomically.
 - Deterministic decisions with a closed set of codes and reasons.
-- Strict bounded YAML loading: one document, no anchors, aliases, merge keys, duplicate keys or unknown fields.
+- Strict bounded YAML loading: one document, no anchors, aliases, merge keys, duplicate keys, explicit `null` values or unknown fields.
 - Offline `validate` and `evaluate` commands.
 - Thread-safe evaluation, verified under the race detector.
 
@@ -139,7 +139,7 @@ Rules of the format:
 - Every `allow` tool must declare `max_calls`, which may not exceed the global budget.
 - A `deny` tool declares neither `max_calls` nor arguments.
 - Tool and argument names are 1 to 64 ASCII characters from `A-Z`, `a-z`, `0-9`, `_`, `.`, `-`.
-- The policy file is at most 1 MiB, must be a single YAML document, and must not use anchors, aliases, merge keys, duplicate keys or unknown fields.
+- The policy file is at most 1 MiB, must be a single YAML document, and must not use anchors, aliases, merge keys, duplicate keys, explicit `null` values or unknown fields. An optional field is omitted, not set to `null`.
 
 ## Decision Model
 

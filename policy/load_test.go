@@ -63,6 +63,15 @@ func TestLoadRejects(t *testing.T) {
 		{"anchor", "version: &v 1\ndefault: deny\nbudget:\n  max_calls: 1\ntools:\n  a:\n    effect: deny\n", "policy: YAML anchors and aliases are not supported"},
 		{"alias", "version: 1\ndefault: &d deny\nbudget:\n  max_calls: 1\ntools:\n  a:\n    effect: *d\n", "policy: YAML anchors and aliases are not supported"},
 		{"merge key", "version: 1\ndefault: deny\nbudget:\n  max_calls: 1\ntools:\n  a:\n    <<:\n      effect: deny\n", "policy: YAML merge keys are not supported"},
+		{"null required", strings.Replace(validPolicy, "        required: true\n", "        required: null\n", 1), "policy: explicit null values are not supported"},
+		{"null prefix", strings.Replace(validPolicy, "        max_length: 200\n", "        max_length: 200\n        prefix: null\n", 1), "policy: explicit null values are not supported"},
+		{"null max_length", strings.Replace(validPolicy, "        max_length: 200\n", "        max_length: null\n", 1), "policy: explicit null values are not supported"},
+		{"null min", strings.Replace(validPolicy, "        max_length: 200\n", "        max_length: 200\n        min: null\n", 1), "policy: explicit null values are not supported"},
+		{"null max", strings.Replace(validPolicy, "        max_length: 200\n", "        max_length: 200\n        max: null\n", 1), "policy: explicit null values are not supported"},
+		{"null enum", strings.Replace(validPolicy, "        max_length: 200\n", "        max_length: 200\n        enum: null\n", 1), "policy: explicit null values are not supported"},
+		{"null arguments", strings.Replace(validPolicy, "    arguments:\n      query:\n        type: string\n        required: true\n        max_length: 200\n", "    arguments: null\n", 1), "policy: explicit null values are not supported"},
+		{"null tools", "version: 1\ndefault: deny\nbudget:\n  max_calls: 6\ntools: null\n", "policy: explicit null values are not supported"},
+		{"null budget", strings.Replace(validPolicy, "budget:\n  max_calls: 6\n", "budget: null\n", 1), "policy: explicit null values are not supported"},
 	}
 
 	for _, test := range tests {
@@ -75,6 +84,17 @@ func TestLoadRejects(t *testing.T) {
 				t.Errorf("Load() error = %q, want it to contain %q", err, test.want)
 			}
 		})
+	}
+}
+
+func TestLoadAcceptsOmittedOptionalFields(t *testing.T) {
+	engine := mustLoad(t, strings.Replace(validPolicy, "        required: true\n        max_length: 200\n", "", 1))
+	query := engine.tools["search_docs"].arguments["query"]
+	if query.required {
+		t.Error("required = true, want false when omitted")
+	}
+	if query.enum != nil {
+		t.Errorf("enum = %v, want nil when omitted", query.enum)
 	}
 }
 
