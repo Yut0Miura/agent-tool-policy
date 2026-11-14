@@ -3,6 +3,8 @@ package policy
 import (
 	"fmt"
 	"math"
+	"strings"
+	"unicode/utf8"
 )
 
 // maxBudget is the largest authorization budget a policy may configure.
@@ -136,6 +138,21 @@ func validateStringConstraints(path string, argument argumentConfig) error {
 	}
 	if argument.MaxLength != nil && *argument.MaxLength < 1 {
 		return fmt.Errorf("%s.max_length: must be >= 1", path)
+	}
+
+	// Constraints combine with AND, so they must be satisfiable together.
+	// Lengths count runes and comparisons are exact, as at evaluation time.
+	if argument.Prefix != nil && argument.MaxLength != nil &&
+		utf8.RuneCountInString(*argument.Prefix) > *argument.MaxLength {
+		return fmt.Errorf("%s.prefix: must not be longer than max_length", path)
+	}
+	for _, value := range argument.Enum {
+		if argument.MaxLength != nil && utf8.RuneCountInString(value) > *argument.MaxLength {
+			return fmt.Errorf("%s.enum: value %q must not be longer than max_length", path, value)
+		}
+		if argument.Prefix != nil && !strings.HasPrefix(value, *argument.Prefix) {
+			return fmt.Errorf("%s.enum: value %q must start with prefix", path, value)
+		}
 	}
 	return nil
 }

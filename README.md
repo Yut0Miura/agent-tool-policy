@@ -174,6 +174,8 @@ The evaluation order is fixed: tool identifier, tool rule, argument identifiers,
 
 Constraints combine with AND and are checked in a fixed order: type, `max_length`, `enum`, `prefix`, `min`, `max`. `max_length` counts runes, not bytes. Enum and prefix comparisons are exact and case-sensitive. Numbers are compared inside the exactly representable domain `abs(value) <= 9007199254740991`; a value outside it, `NaN` or an infinity is an `argument_type_mismatch`. A supplied `null` is a value of the wrong type, not an absent argument.
 
+Constraints on the same argument must be compatible: a `prefix` must fit within `max_length`, and every `enum` value must satisfy both `prefix` and `max_length`. A policy that combines them otherwise is rejected at load time.
+
 String prefix constraints are lexical checks only. They do not provide filesystem, URL, shell or network sandboxing.
 
 ## Authorization Budgets

@@ -199,6 +199,83 @@ func TestValidateAcceptsToolBudgetEqualToGlobal(t *testing.T) {
 	mustLoad(t, policyWithTool("  a:\n    effect: allow\n    max_calls: 6\n"))
 }
 
+func TestValidateRejectsIncompatibleStringConstraints(t *testing.T) {
+	tests := []struct {
+		name     string
+		argument string
+		want     string
+	}{
+		{
+			"prefix longer than max_length",
+			"      q:\n        type: string\n        prefix: \"docs:\"\n        max_length: 3\n",
+			`policy.tools["search_docs"].arguments["q"].prefix: must not be longer than max_length`,
+		},
+		{
+			"enum value without prefix",
+			"      q:\n        type: string\n        prefix: \"docs:\"\n        enum:\n          - \"docs:read\"\n          - \"admin:delete\"\n",
+			`policy.tools["search_docs"].arguments["q"].enum: value "admin:delete" must start with prefix`,
+		},
+		{
+			"enum value longer than max_length",
+			"      q:\n        type: string\n        max_length: 4\n        enum:\n          - \"read\"\n          - \"write\"\n",
+			`policy.tools["search_docs"].arguments["q"].enum: value "write" must not be longer than max_length`,
+		},
+		{
+			"prefix match is case-sensitive",
+			"      q:\n        type: string\n        prefix: \"docs:\"\n        enum:\n          - \"Docs:read\"\n",
+			`.enum: value "Docs:read" must start with prefix`,
+		},
+		{
+			"unicode prefix counts runes",
+			"      q:\n        type: string\n        prefix: \"\u00e9t\u00e9:\"\n        max_length: 3\n",
+			`.prefix: must not be longer than max_length`,
+		},
+		{
+			"first incompatible enum value is reported",
+			"      q:\n        type: string\n        prefix: \"docs:\"\n        enum:\n          - \"docs:read\"\n          - \"tmp:b\"\n          - \"tmp:a\"\n",
+			`.enum: value "tmp:b" must start with prefix`,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			for attempt := 0; attempt < 10; attempt++ {
+				_, err := Load([]byte(policyWithArgument(test.argument)))
+				if err == nil {
+					t.Fatal("Load() error = nil, want error")
+				}
+				if !strings.Contains(err.Error(), test.want) {
+					t.Fatalf("Load() error = %q, want it to contain %q", err, test.want)
+				}
+			}
+		})
+	}
+}
+
+func TestValidateAcceptsCompatibleStringConstraints(t *testing.T) {
+	tests := []struct {
+		name     string
+		argument string
+	}{
+		{"prefix as long as max_length", "      q:\n        type: string\n        prefix: \"docs:\"\n        max_length: 5\n"},
+		{
+			"enum values within prefix and max_length",
+			"      q:\n        type: string\n        prefix: \"docs:\"\n        max_length: 10\n        enum:\n          - \"docs:read\"\n          - \"docs:list\"\n",
+		},
+		{"unicode prefix within max_length", "      q:\n        type: string\n        prefix: \"\u00e9t\u00e9:\"\n        max_length: 4\n"},
+		{
+			"unicode enum value within max_length",
+			"      q:\n        type: string\n        max_length: 5\n        enum:\n          - \"\u00e9t\u00e9:a\"\n",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			mustLoad(t, policyWithArgument(test.argument))
+		})
+	}
+}
+
 func TestValidateAcceptsArgumentSections(t *testing.T) {
 	tests := []struct {
 		name     string
