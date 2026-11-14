@@ -53,7 +53,7 @@ func validateTool(name string, tool toolConfig, globalMaxCalls int) error {
 		if tool.MaxCalls != nil {
 			return fmt.Errorf("%s.max_calls: not allowed for deny rule", path)
 		}
-		if len(tool.Arguments) > 0 {
+		if tool.Arguments != nil {
 			return fmt.Errorf("%s.arguments: not allowed for deny rule", path)
 		}
 		return nil
@@ -61,8 +61,9 @@ func validateTool(name string, tool toolConfig, globalMaxCalls int) error {
 		return fmt.Errorf("%s.effect: must equal %q or %q", path, "allow", "deny")
 	}
 
-	for _, argument := range sortedKeys(tool.Arguments) {
-		if err := validateArgument(path, argument, tool.Arguments[argument]); err != nil {
+	arguments := tool.argumentConfigs()
+	for _, argument := range sortedKeys(arguments) {
+		if err := validateArgument(path, argument, arguments[argument]); err != nil {
 			return err
 		}
 	}

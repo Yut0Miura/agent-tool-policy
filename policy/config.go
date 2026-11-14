@@ -15,9 +15,19 @@ type budgetConfig struct {
 }
 
 type toolConfig struct {
-	Effect    string                    `yaml:"effect"`
-	MaxCalls  *int                      `yaml:"max_calls"`
-	Arguments map[string]argumentConfig `yaml:"arguments"`
+	Effect    string                     `yaml:"effect"`
+	MaxCalls  *int                       `yaml:"max_calls"`
+	Arguments *map[string]argumentConfig `yaml:"arguments"`
+}
+
+// argumentConfigs returns the declared arguments. Arguments is a pointer so
+// that an absent section can be told apart from an explicitly empty one; an
+// absent section declares no arguments.
+func (tool toolConfig) argumentConfigs() map[string]argumentConfig {
+	if tool.Arguments == nil {
+		return nil
+	}
+	return *tool.Arguments
 }
 
 type argumentConfig struct {

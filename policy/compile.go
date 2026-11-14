@@ -36,12 +36,13 @@ func compile(config *policyConfig) *Engine {
 			continue
 		}
 
+		arguments := tool.argumentConfigs()
 		compiled := compiledTool{
 			effect:    EffectAllow,
 			maxCalls:  *tool.MaxCalls,
-			arguments: make(map[string]compiledArgument, len(tool.Arguments)),
+			arguments: make(map[string]compiledArgument, len(arguments)),
 		}
-		for argumentName, argument := range tool.Arguments {
+		for argumentName, argument := range arguments {
 			compiled.arguments[argumentName] = compiledArgument{
 				kind:      argument.Type,
 				required:  argument.Required,

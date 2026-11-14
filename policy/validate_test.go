@@ -85,6 +85,16 @@ func TestValidateRejects(t *testing.T) {
 			`policy.tools["a"].arguments: not allowed for deny rule`,
 		},
 		{
+			"deny with empty arguments",
+			policyWithTool("  a:\n    effect: deny\n    arguments: {}\n"),
+			`policy.tools["a"].arguments: not allowed for deny rule`,
+		},
+		{
+			"deny with null arguments",
+			policyWithTool("  a:\n    effect: deny\n    arguments: null\n"),
+			"policy: explicit null values are not supported",
+		},
+		{
 			"invalid argument name",
 			policyWithArgument("      \"bad name\":\n        type: string\n"),
 			`policy.tools["search_docs"].arguments["bad name"]: invalid argument name`,
@@ -187,4 +197,37 @@ func TestValidateRejectsEnumNull(t *testing.T) {
 
 func TestValidateAcceptsToolBudgetEqualToGlobal(t *testing.T) {
 	mustLoad(t, policyWithTool("  a:\n    effect: allow\n    max_calls: 6\n"))
+}
+
+func TestValidateAcceptsArgumentSections(t *testing.T) {
+	tests := []struct {
+		name     string
+		document string
+	}{
+		{"deny without arguments", policyWithTool("  a:\n    effect: deny\n")},
+		{"allow without arguments", policyWithTool("  a:\n    effect: allow\n    max_calls: 1\n")},
+		{"allow with empty arguments", policyWithTool("  a:\n    effect: allow\n    max_calls: 1\n    arguments: {}\n")},
+		{"allow with declared arguments", policyWithArgument("      q:\n        type: string\n")},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			mustLoad(t, test.document)
+		})
+	}
+}
+
+func TestAllowWithoutDeclaredArgumentsAcceptsOnlyEmptyArguments(t *testing.T) {
+	// An absent arguments section and an empty one both declare no arguments.
+	for _, section := range []string{"", "    arguments: {}\n"} {
+		run := mustLoad(t, policyWithTool("  a:\n    effect: allow\n    max_calls: 2\n"+section)).NewRun()
+
+		if decision := run.Evaluate(ToolCall{Tool: "a"}); decision.Code != codeAllowed {
+			t.Errorf("section %q, no arguments: code = %q, want %q", section, decision.Code, codeAllowed)
+		}
+		decision := run.Evaluate(ToolCall{Tool: "a", Arguments: map[string]any{"q": "x"}})
+		if decision.Code != codeUnexpectedArgument {
+			t.Errorf("section %q, one argument: code = %q, want %q", section, decision.Code, codeUnexpectedArgument)
+		}
+	}
 }
