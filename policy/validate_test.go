@@ -169,6 +169,21 @@ func TestValidateRejects(t *testing.T) {
 			policyWithArgument("      q:\n        type: number\n        min: 5\n        max: 4\n"),
 			`.min: must be <= max`,
 		},
+		{
+			"decimal minimum above maximum",
+			policyWithArgument("      q:\n        type: number\n        min: 0.10000000000000001\n        max: 0.1\n"),
+			`.min: must be <= max`,
+		},
+		{
+			"tiny minimum above zero maximum",
+			policyWithArgument("      q:\n        type: number\n        min: 1e-400\n        max: 0\n"),
+			`.min: must be <= max`,
+		},
+		{
+			"minimum beyond decimal limits",
+			policyWithArgument("      q:\n        type: number\n        min: 1e-5000\n"),
+			`.min: must be a finite number within 9007199254740991`,
+		},
 	}
 
 	for _, test := range tests {

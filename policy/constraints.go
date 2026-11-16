@@ -31,10 +31,10 @@ func checkArgument(name string, argument compiledArgument, value any) (code, rea
 		if !ok {
 			return codeArgumentTypeMismatch, "argument " + quote(name) + " has invalid type"
 		}
-		if argument.min != nil && number < *argument.min {
+		if argument.min != nil && number.compare(argument.min) < 0 {
 			return codeNumberBelowMin, "argument " + quote(name) + " is below minimum"
 		}
-		if argument.max != nil && number > *argument.max {
+		if argument.max != nil && number.compare(argument.max) > 0 {
 			return codeNumberAboveMax, "argument " + quote(name) + " is above maximum"
 		}
 		return "", ""

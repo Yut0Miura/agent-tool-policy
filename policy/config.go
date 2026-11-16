@@ -31,11 +31,11 @@ func (tool toolConfig) argumentConfigs() map[string]argumentConfig {
 }
 
 type argumentConfig struct {
-	Type      string   `yaml:"type"`
-	Required  bool     `yaml:"required"`
-	Prefix    *string  `yaml:"prefix"`
-	Enum      []string `yaml:"enum"`
-	MaxLength *int     `yaml:"max_length"`
-	Min       *float64 `yaml:"min"`
-	Max       *float64 `yaml:"max"`
+	Type      string       `yaml:"type"`
+	Required  bool         `yaml:"required"`
+	Prefix    *string      `yaml:"prefix"`
+	Enum      []string     `yaml:"enum"`
+	MaxLength *int         `yaml:"max_length"`
+	Min       *numberBound `yaml:"min"`
+	Max       *numberBound `yaml:"max"`
 }

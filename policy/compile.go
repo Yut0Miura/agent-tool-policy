@@ -8,8 +8,8 @@ type compiledArgument struct {
 	prefix    *string
 	enum      []string
 	maxLength *int
-	min       *float64
-	max       *float64
+	min       *numberBound
+	max       *numberBound
 }
 
 type compiledTool struct {

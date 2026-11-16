@@ -3,6 +3,7 @@ package policy
 import (
 	"encoding/json"
 	"math"
+	"strings"
 	"testing"
 )
 
@@ -167,6 +168,91 @@ func TestNumericBounds(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			assertCode(t, evaluateArgument(t, "numbers", "bounded", test.value), test.want)
+		})
+	}
+}
+
+const decimalBoundPolicy = `version: 1
+default: deny
+budget:
+  max_calls: 1000
+tools:
+  numbers:
+    effect: allow
+    max_calls: 1000
+    arguments:
+      ratio:
+        type: number
+        required: false
+        min: 0.1
+      ceiling:
+        type: number
+        required: false
+        max: 0
+`
+
+func TestJSONNumbersAreComparedWithoutRounding(t *testing.T) {
+	tests := []struct {
+		name     string
+		argument string
+		value    any
+		want     string
+	}{
+		{"decimal equal to minimum", "ratio", json.Number("0.1"), codeAllowed},
+		{"decimal just below minimum", "ratio", json.Number("0.09999999999999999999999"), codeNumberBelowMin},
+		{"decimal above minimum", "ratio", json.Number("0.11"), codeAllowed},
+		{"exponent equal to minimum", "ratio", json.Number("1E-1"), codeAllowed},
+		{"zero at maximum", "ceiling", json.Number("0"), codeAllowed},
+		{"negative zero at maximum", "ceiling", json.Number("-0.0"), codeAllowed},
+		{"zero with large exponent", "ceiling", json.Number("0e999999999"), codeAllowed},
+		{"tiny value above maximum", "ceiling", json.Number("1e-400"), codeNumberAboveMax},
+		{"tiny negative value", "ceiling", json.Number("-1e-400"), codeAllowed},
+		{"float64 equal to minimum", "ratio", 0.1, codeAllowed},
+		{"float64 below minimum", "ratio", 0.09, codeNumberBelowMin},
+		{"integer at maximum", "ceiling", 0, codeAllowed},
+		{"integer above maximum", "ceiling", int64(1), codeNumberAboveMax},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			run := mustLoad(t, decimalBoundPolicy).NewRun()
+			decision := run.Evaluate(ToolCall{Tool: "numbers", Arguments: map[string]any{test.argument: test.value}})
+			assertCode(t, decision, test.want)
+		})
+	}
+}
+
+func TestJSONNumberGrammarAndDomain(t *testing.T) {
+	tests := []struct {
+		name  string
+		value json.Number
+		want  string
+	}{
+		{"safe integer limit", "9007199254740991", codeAllowed},
+		{"negative safe integer limit", "-9007199254740991", codeAllowed},
+		{"exponent within domain", "9.007199254740991e15", codeAllowed},
+		{"leading zero", "01", codeArgumentTypeMismatch},
+		{"plus sign", "+1", codeArgumentTypeMismatch},
+		{"missing integer part", ".5", codeArgumentTypeMismatch},
+		{"missing fraction digits", "1.", codeArgumentTypeMismatch},
+		{"missing exponent digits", "1e+", codeArgumentTypeMismatch},
+		{"surrounding space", " 1", codeArgumentTypeMismatch},
+		{"beyond safe integer", "9007199254740992", codeArgumentTypeMismatch},
+		{"negative beyond safe integer", "-9007199254740992", codeArgumentTypeMismatch},
+		{"fraction beyond safe integer", "9007199254740991.5", codeArgumentTypeMismatch},
+		{"exponent beyond safe integer", "1e16", codeArgumentTypeMismatch},
+		{"NaN", "NaN", codeArgumentTypeMismatch},
+		{"infinity", "Infinity", codeArgumentTypeMismatch},
+		{"negative infinity", "-Infinity", codeArgumentTypeMismatch},
+		{"huge exponent", "1e999999999", codeArgumentTypeMismatch},
+		{"huge negative exponent", "1e-999999999", codeArgumentTypeMismatch},
+		{"long exponent", json.Number("1e" + strings.Repeat("9", 1000)), codeArgumentTypeMismatch},
+		{"long significand", json.Number("0." + strings.Repeat("1", 2000)), codeArgumentTypeMismatch},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			assertCode(t, evaluateArgument(t, "numbers", "free", test.value), test.want)
 		})
 	}
 }

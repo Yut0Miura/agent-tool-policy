@@ -158,13 +158,15 @@ func validateStringConstraints(path string, argument argumentConfig) error {
 }
 
 func validateNumberConstraints(path string, argument argumentConfig) error {
-	if argument.Min != nil && !inSafeDomain(*argument.Min) {
+	if argument.Min != nil && !argument.Min.supported() {
 		return fmt.Errorf("%s.min: must be a finite number within %d", path, safeInteger)
 	}
-	if argument.Max != nil && !inSafeDomain(*argument.Max) {
+	if argument.Max != nil && !argument.Max.supported() {
 		return fmt.Errorf("%s.max: must be a finite number within %d", path, safeInteger)
 	}
-	if argument.Min != nil && argument.Max != nil && *argument.Min > *argument.Max {
+	// Bounds are compared as written, so that two decimals that round to
+	// the same float64 are still ordered correctly.
+	if argument.Min != nil && argument.Max != nil && argument.Min.exact.Cmp(argument.Max.exact) > 0 {
 		return fmt.Errorf("%s.min: must be <= max", path)
 	}
 	return nil
