@@ -15,6 +15,10 @@ func checkArgument(name string, argument compiledArgument, value any) (code, rea
 		if !ok {
 			return codeArgumentTypeMismatch, "argument " + quote(name) + " has invalid type"
 		}
+		if !utf8.ValidString(text) {
+			return codeArgumentTypeMismatch,
+				"argument " + quote(name) + " has invalid type"
+		}
 		if argument.maxLength != nil && utf8.RuneCountInString(text) > *argument.maxLength {
 			return codeStringTooLong, "argument " + quote(name) + " exceeds maximum length"
 		}

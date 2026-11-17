@@ -341,6 +341,64 @@ func TestBooleanArgument(t *testing.T) {
 	assertCode(t, evaluateArgument(t, "flags", "verbose", 1), codeArgumentTypeMismatch)
 }
 
+func TestInvalidUTF8StringIsATypeMismatch(t *testing.T) {
+	for _, value := range []string{"\xff", "a\xc3", "\xed\xa0\x80"} {
+		decision := evaluateArgument(t, "strings", "optional", value)
+		if decision.Effect != EffectDeny {
+			t.Errorf("value %q: effect = %q, want %q", value, decision.Effect, EffectDeny)
+		}
+		assertCode(t, decision, codeArgumentTypeMismatch)
+		if want := `argument "optional" has invalid type`; decision.Reason != want {
+			t.Errorf("value %q: reason = %q, want %q", value, decision.Reason, want)
+		}
+	}
+}
+
+const unicodePolicy = `version: 1
+default: deny
+budget:
+  max_calls: 100
+tools:
+  menu:
+    effect: allow
+    max_calls: 100
+    arguments:
+      section:
+        type: string
+        required: false
+        prefix: "caf\u00e9:"
+      word:
+        type: string
+        required: false
+        enum:
+          - "\u00fcber"
+          - "\U0001F600"
+`
+
+func TestUnicodePrefixAndEnumAreExact(t *testing.T) {
+	tests := []struct {
+		name     string
+		argument string
+		value    string
+		want     string
+	}{
+		{"precomposed prefix", "section", "caf\u00e9:drinks", codeAllowed},
+		{"decomposed prefix is not normalized", "section", "cafe\u0301:drinks", codeStringPrefixMismatch},
+		{"precomposed enum value", "word", "\u00fcber", codeAllowed},
+		{"decomposed enum value is not normalized", "word", "u\u0308ber", codeStringEnumMismatch},
+		{"supplementary plane enum value", "word", "\U0001F600", codeAllowed},
+		{"replacement character", "word", "\ufffd", codeStringEnumMismatch},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			run := mustLoad(t, unicodePolicy).NewRun()
+			decision := run.Evaluate(ToolCall{Tool: "menu", Arguments: map[string]any{test.argument: test.value}})
+			assertCode(t, decision, test.want)
+		})
+	}
+}
+
 func TestTypeIsCheckedBeforeOtherConstraints(t *testing.T) {
 	// A value of the wrong type never reaches the length or enum checks.
 	assertCode(t, evaluateArgument(t, "strings", "limited", 123456789), codeArgumentTypeMismatch)

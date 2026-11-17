@@ -8,16 +8,22 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strconv"
+	"unicode/utf8"
 )
 
 // maxNesting is the deepest object or array nesting accepted in one input
 // line.
 const maxNesting = 64
 
-// checkJSONStructure validates the token structure of one input line before
-// it is decoded: exactly one JSON value, no duplicate object member at any
-// depth, and nesting within the limit.
+// checkJSONStructure validates one input line before it is decoded: valid
+// UTF-8, exactly one JSON value, no duplicate object member at any depth,
+// nesting within the limit, and no Unicode escape that is not valid UTF-16.
 func checkJSONStructure(line []byte) error {
+	if !utf8.Valid(line) {
+		return errors.New("input is not valid UTF-8")
+	}
+
 	decoder := json.NewDecoder(bytes.NewReader(line))
 	decoder.UseNumber()
 
@@ -32,7 +38,64 @@ func checkJSONStructure(line []byte) error {
 	if _, err := decoder.Token(); !errors.Is(err, io.EOF) {
 		return errors.New("unexpected data after the first JSON value")
 	}
+	return checkUnicodeEscapes(line)
+}
+
+// checkUnicodeEscapes rejects \u escapes that do not form valid UTF-16 in
+// any JSON string, object keys included: a high surrogate must be followed
+// by a low surrogate, and a low surrogate must follow a high one.
+// encoding/json would silently replace such escapes with U+FFFD, and
+// json.Valid accepts them. The line must already be valid JSON.
+func checkUnicodeEscapes(line []byte) error {
+	inString := false
+	for i := 0; i < len(line); i++ {
+		if !inString {
+			inString = line[i] == '"'
+			continue
+		}
+
+		switch line[i] {
+		case '"':
+			inString = false
+		case '\\':
+			i++
+			if line[i] != 'u' {
+				continue
+			}
+			unit := utf16Unit(line[i+1 : i+5])
+			i += 4
+			switch {
+			case isHighSurrogate(unit):
+				if i+6 < len(line) && line[i+1] == '\\' && line[i+2] == 'u' &&
+					isLowSurrogate(utf16Unit(line[i+3:i+7])) {
+					i += 6
+					continue
+				}
+				return errors.New("invalid Unicode escape: unpaired high surrogate")
+			case isLowSurrogate(unit):
+				return errors.New("invalid Unicode escape: unpaired low surrogate")
+			}
+		}
+	}
 	return nil
+}
+
+// utf16Unit decodes the four hexadecimal digits of a \u escape. It returns
+// 0 for malformed digits, which valid JSON never contains.
+func utf16Unit(digits []byte) uint64 {
+	unit, err := strconv.ParseUint(string(digits), 16, 16)
+	if err != nil {
+		return 0
+	}
+	return unit
+}
+
+func isHighSurrogate(unit uint64) bool {
+	return unit >= 0xD800 && unit <= 0xDBFF
+}
+
+func isLowSurrogate(unit uint64) bool {
+	return unit >= 0xDC00 && unit <= 0xDFFF
 }
 
 func walkValue(decoder *json.Decoder, token json.Token, depth int) error {

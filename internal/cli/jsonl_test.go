@@ -79,6 +79,66 @@ func TestInputErrors(t *testing.T) {
 	}
 }
 
+func TestValidUnicodeInputIsAccepted(t *testing.T) {
+	tests := []struct {
+		name string
+		line string
+	}{
+		{"plain UTF-8", "{\"tool\":\"search_docs\",\"arguments\":{\"query\":\"caf\u00e9 \u00fcber\"}}"},
+		{"escaped BMP character", `{"tool":"search_docs","arguments":{"query":"caf\u00e9"}}`},
+		{"surrogate pair", `{"tool":"search_docs","arguments":{"query":"\ud83d\ude00"}}`},
+		{"uppercase surrogate pair", `{"tool":"search_docs","arguments":{"query":"\uD83D\uDE00"}}`},
+		{"escaped backslash before u", `{"tool":"search_docs","arguments":{"query":"\\ud800"}}`},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			code, stdout, stderr := evaluateInput(t, test.line+"\n")
+			if code != 0 {
+				t.Fatalf("exit code = %d (%s), want 0", code, stderr)
+			}
+			if !strings.Contains(stdout, `"code":"allowed"`) {
+				t.Errorf("stdout = %q, want an allowed decision", stdout)
+			}
+		})
+	}
+}
+
+func TestMalformedUnicodeIsAnInputError(t *testing.T) {
+	tests := []struct {
+		name string
+		line string
+		want string
+	}{
+		{"lone high surrogate", `{"tool":"search_docs","arguments":{"query":"\ud800"}}`, "unpaired high surrogate"},
+		{"lone low surrogate", `{"tool":"search_docs","arguments":{"query":"\udc00"}}`, "unpaired low surrogate"},
+		{"high surrogate before a non-surrogate", `{"tool":"search_docs","arguments":{"query":"\ud800\u0041"}}`, "unpaired high surrogate"},
+		{"two high surrogates", `{"tool":"search_docs","arguments":{"query":"\ud800\ud800"}}`, "unpaired high surrogate"},
+		{"reversed surrogate pair", `{"tool":"search_docs","arguments":{"query":"\ude00\ud83d"}}`, "unpaired low surrogate"},
+		{"high surrogate at end of string", `{"tool":"search_docs","arguments":{"query":"a\ud83d"}}`, "unpaired high surrogate"},
+		{"lone surrogate in a key", `{"tool":"search_docs","arguments":{"\ud800":"a"}}`, "unpaired high surrogate"},
+		{"lone surrogate in the tool name", `{"tool":"search\udc00docs"}`, "unpaired low surrogate"},
+		{"invalid UTF-8 byte", "{\"tool\":\"search_docs\",\"arguments\":{\"query\":\"a\xffb\"}}", "input is not valid UTF-8"},
+		{"truncated UTF-8 sequence", "{\"tool\":\"search_docs\",\"arguments\":{\"query\":\"\xc3\"}}", "input is not valid UTF-8"},
+		{"encoded surrogate", "{\"tool\":\"search_docs\",\"arguments\":{\"query\":\"\xed\xa0\x80\"}}", "input is not valid UTF-8"},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			code, stdout, stderr := evaluateInput(t, test.line+"\n")
+			if code != 2 {
+				t.Fatalf("exit code = %d, want 2", code)
+			}
+			if stdout != "" {
+				t.Errorf("stdout = %q, want empty", stdout)
+			}
+			if !strings.HasPrefix(stderr, "line 1: invalid tool call: ") || !strings.Contains(stderr, test.want) {
+				t.Errorf("stderr = %q, want it to contain %q", stderr, test.want)
+			}
+		})
+	}
+}
+
 func TestNestingAtLimitIsAccepted(t *testing.T) {
 	// The top-level object plus 62 arrays stays inside the 64-level limit.
 	nested := strings.Repeat("[", 62) + strings.Repeat("]", 62)
