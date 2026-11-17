@@ -18,8 +18,10 @@ func checkArgument(name string, argument compiledArgument, value any) (code, rea
 		if argument.maxLength != nil && utf8.RuneCountInString(text) > *argument.maxLength {
 			return codeStringTooLong, "argument " + quote(name) + " exceeds maximum length"
 		}
-		if argument.enum != nil && !contains(argument.enum, text) {
-			return codeStringEnumMismatch, "argument " + quote(name) + " is not an allowed value"
+		if argument.enum != nil {
+			if _, ok := argument.enum[text]; !ok {
+				return codeStringEnumMismatch, "argument " + quote(name) + " is not an allowed value"
+			}
 		}
 		if argument.prefix != nil && !strings.HasPrefix(text, *argument.prefix) {
 			return codeStringPrefixMismatch, "argument " + quote(name) + " does not match required prefix"
@@ -45,13 +47,4 @@ func checkArgument(name string, argument compiledArgument, value any) (code, rea
 		}
 		return "", ""
 	}
-}
-
-func contains(values []string, value string) bool {
-	for _, candidate := range values {
-		if candidate == value {
-			return true
-		}
-	}
-	return false
 }

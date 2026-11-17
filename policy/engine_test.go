@@ -1,6 +1,10 @@
 package policy
 
-import "testing"
+import (
+	"strings"
+	"sync"
+	"testing"
+)
 
 const decisionPolicy = `version: 1
 default: deny
@@ -157,6 +161,30 @@ tools:
 	if decision.Effect != EffectAllow {
 		t.Fatalf("decision = %+v, want allow", decision)
 	}
+}
+
+func TestConcurrentEvaluateReadsCompiledEnum(t *testing.T) {
+	engine := mustLoad(t, enumPolicy(1000))
+	shared := engine.NewRun()
+
+	var wait sync.WaitGroup
+	for i := 0; i < 50; i++ {
+		wait.Add(1)
+		go func(index int) {
+			defer wait.Done()
+			for _, run := range []*Run{shared, engine.NewRun()} {
+				member := enumValue(index * 20)
+				if decision := run.Evaluate(ToolCall{Tool: "pick", Arguments: map[string]any{"choice": member}}); decision.Code != codeAllowed {
+					t.Errorf("choice %q: code = %q, want %q", member, decision.Code, codeAllowed)
+				}
+				outsider := strings.ToUpper(member)
+				if decision := run.Evaluate(ToolCall{Tool: "pick", Arguments: map[string]any{"choice": outsider}}); decision.Code != codeStringEnumMismatch {
+					t.Errorf("choice %q: code = %q, want %q", outsider, decision.Code, codeStringEnumMismatch)
+				}
+			}
+		}(i)
+	}
+	wait.Wait()
 }
 
 func TestEvaluateDoesNotMutateArguments(t *testing.T) {

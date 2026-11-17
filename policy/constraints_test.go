@@ -2,6 +2,7 @@ package policy
 
 import (
 	"encoding/json"
+	"fmt"
 	"math"
 	"strings"
 	"testing"
@@ -107,6 +108,82 @@ func TestStringConstraints(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			assertCode(t, evaluateArgument(t, "strings", test.argument, test.value), test.want)
+		})
+	}
+}
+
+// enumPolicy returns a policy whose pick tool takes one required string
+// argument restricted to size enum values.
+func enumPolicy(size int) string {
+	var policy strings.Builder
+	policy.WriteString("version: 1\ndefault: deny\nbudget:\n  max_calls: 1000\ntools:\n" +
+		"  pick:\n    effect: allow\n    max_calls: 1000\n    arguments:\n" +
+		"      choice:\n        type: string\n        required: true\n        enum:\n")
+	for i := 0; i < size; i++ {
+		fmt.Fprintf(&policy, "          - %s\n", enumValue(i))
+	}
+	return policy.String()
+}
+
+func enumValue(i int) string {
+	return fmt.Sprintf("value_%04d", i)
+}
+
+func TestLargeEnum(t *testing.T) {
+	run := mustLoad(t, enumPolicy(1000)).NewRun()
+	tests := []struct {
+		name  string
+		value string
+		want  string
+	}{
+		{"first member", enumValue(0), codeAllowed},
+		{"middle member", enumValue(500), codeAllowed},
+		{"last member", enumValue(999), codeAllowed},
+		{"outsider", enumValue(1000), codeStringEnumMismatch},
+		{"case sensitive", strings.ToUpper(enumValue(999)), codeStringEnumMismatch},
+		{"prefix of a member", "value_", codeStringEnumMismatch},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			decision := run.Evaluate(ToolCall{Tool: "pick", Arguments: map[string]any{"choice": test.value}})
+			assertCode(t, decision, test.want)
+		})
+	}
+}
+
+func TestEnumMismatchDecision(t *testing.T) {
+	run := mustLoad(t, constraintPolicy).NewRun()
+	decision := run.Evaluate(ToolCall{Tool: "strings", Arguments: map[string]any{"listed": "database"}})
+	want := Decision{
+		Effect: EffectDeny,
+		Tool:   "strings",
+		Code:   codeStringEnumMismatch,
+		Reason: `argument "listed" is not an allowed value`,
+	}
+	if decision != want {
+		t.Fatalf("decision = %+v, want %+v", decision, want)
+	}
+}
+
+func BenchmarkEnumLookup(b *testing.B) {
+	for _, size := range []int{10, 100, 1000} {
+		b.Run(fmt.Sprintf("size=%d", size), func(b *testing.B) {
+			engine, err := Load([]byte(enumPolicy(size)))
+			if err != nil {
+				b.Fatalf("Load() error = %v", err)
+			}
+			argument := engine.tools["pick"].arguments["choice"]
+			// The last member is the worst case for a linear search.
+			value := enumValue(size - 1)
+
+			b.ReportAllocs()
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				if code, _ := checkArgument("choice", argument, value); code != "" {
+					b.Fatalf("code = %q, want accepted", code)
+				}
+			}
 		})
 	}
 }

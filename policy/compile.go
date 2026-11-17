@@ -6,7 +6,7 @@ type compiledArgument struct {
 	kind      string
 	required  bool
 	prefix    *string
-	enum      []string
+	enum      map[string]struct{}
 	maxLength *int
 	min       *numberBound
 	max       *numberBound
@@ -47,7 +47,7 @@ func compile(config *policyConfig) *Engine {
 				kind:      argument.Type,
 				required:  argument.Required,
 				prefix:    argument.Prefix,
-				enum:      argument.Enum,
+				enum:      enumSet(argument.Enum),
 				maxLength: argument.MaxLength,
 				min:       argument.Min,
 				max:       argument.Max,
@@ -62,6 +62,20 @@ func compile(config *policyConfig) *Engine {
 		engine.tools[name] = compiled
 	}
 	return engine
+}
+
+// enumSet builds the lookup set of a string enum. A configuration without
+// an enum keeps a nil set. The set is built once at load time and is never
+// modified afterwards, so concurrent evaluations only read it.
+func enumSet(values []string) map[string]struct{} {
+	if values == nil {
+		return nil
+	}
+	set := make(map[string]struct{}, len(values))
+	for _, value := range values {
+		set[value] = struct{}{}
+	}
+	return set
 }
 
 func sortedKeys[V any](m map[string]V) []string {
