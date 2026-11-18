@@ -221,7 +221,7 @@ usage: agent-tool-policy <validate|evaluate> -policy <path>
 
 Exit codes: `0` when the command completed, including DENY decisions; `1` for a policy load or validation error; `2` for a usage or input error.
 
-Input lines are at most 1 MiB. Blank lines are ignored but still count towards the physical line number. A line must contain exactly one JSON value with only the `tool` and `arguments` fields, no duplicate object member at any depth, and nesting no deeper than 64. Malformed input stops processing; decisions already written stay written.
+Input lines are at most 1 MiB. Blank lines, which contain only spaces, tabs or carriage returns, are ignored but still count towards the physical line number. A line must contain exactly one JSON object with only the `tool` and `arguments` fields, no duplicate object member at any depth, and nesting no deeper than 64. `tool`, when present, must be a string. `arguments`, when present, must be an object or `null`, which is the same as omitting it. A missing or empty `tool` is not an input error: the call is evaluated and denied with `invalid_call`. Malformed input stops processing; decisions already written stay written.
 
 ## Decision vs Enforcement
 

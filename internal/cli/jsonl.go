@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"strings"
 
 	"github.com/Yut0Miura/agent-tool-policy/policy"
 )
@@ -30,7 +29,7 @@ func evaluateStream(run *policy.Run, stdin io.Reader, stdout, stderr io.Writer) 
 		if len(raw) > maxLineBytes {
 			return oversized(stderr, line)
 		}
-		if strings.TrimSpace(string(raw)) == "" {
+		if len(bytes.Trim(raw, jsonWhitespace)) == 0 {
 			continue
 		}
 
@@ -63,6 +62,9 @@ func oversized(stderr io.Writer, line int) int {
 func decodeToolCall(raw []byte) (policy.ToolCall, error) {
 	var call policy.ToolCall
 	if err := checkJSONStructure(raw); err != nil {
+		return call, err
+	}
+	if err := checkToolCallShape(raw); err != nil {
 		return call, err
 	}
 

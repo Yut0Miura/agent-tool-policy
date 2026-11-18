@@ -47,6 +47,47 @@ func TestArgumentsContainerForms(t *testing.T) {
 	}
 }
 
+func TestToolCallShape(t *testing.T) {
+	tests := []struct {
+		name  string
+		line  string
+		want  string
+		isErr bool
+	}{
+		{name: "null", line: `null`, want: "top-level value must be a JSON object", isErr: true},
+		{name: "array", line: `[]`, want: "top-level value must be a JSON object", isErr: true},
+		{name: "null tool", line: `{"tool":null}`, want: `field "tool" must be a JSON string`, isErr: true},
+		{name: "null tool with whitespace", line: `{ "tool" : null }`, want: `field "tool" must be a JSON string`, isErr: true},
+		{name: "empty tool", line: `{"tool":""}`, want: `"code":"invalid_call"`},
+		{name: "omitted tool", line: `{}`, want: `"code":"invalid_call"`},
+		{name: "null arguments", line: `{"tool":"search_docs","arguments":null}`, want: `"code":"missing_argument"`},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			code, stdout, stderr := evaluateInput(t, test.line+"\n")
+			if test.isErr {
+				if code != 2 {
+					t.Fatalf("exit code = %d, want 2", code)
+				}
+				if stdout != "" {
+					t.Errorf("stdout = %q, want empty", stdout)
+				}
+				if !strings.HasPrefix(stderr, "line 1: invalid tool call: ") || !strings.Contains(stderr, test.want) {
+					t.Errorf("stderr = %q, want it to contain %q", stderr, test.want)
+				}
+				return
+			}
+			if code != 0 {
+				t.Fatalf("exit code = %d (%s), want 0", code, stderr)
+			}
+			if !strings.Contains(stdout, test.want) {
+				t.Errorf("stdout = %q, want it to contain %q", stdout, test.want)
+			}
+		})
+	}
+}
+
 func TestInputErrors(t *testing.T) {
 	deepArray := strings.Repeat("[", 65) + strings.Repeat("]", 65)
 	tests := []struct {
@@ -55,7 +96,7 @@ func TestInputErrors(t *testing.T) {
 		want string
 	}{
 		{"malformed JSON", `{"tool":`, "unexpected end of JSON input"},
-		{"not an object", `"search_docs"`, "json: cannot unmarshal"},
+		{"not an object", `"search_docs"`, "top-level value must be a JSON object"},
 		{"unknown top-level field", `{"tool":"search_docs","extra":1}`, `unknown field "extra"`},
 		{"duplicate JSON key", `{"tool":"search_docs","tool":"delete_resource"}`, `duplicate object key "tool"`},
 		{"duplicate nested key", `{"tool":"search_docs","arguments":{"query":"a","query":"b"}}`, `duplicate object key "query"`},
@@ -163,6 +204,61 @@ func TestBlankLinesAreIgnoredButCounted(t *testing.T) {
 	}
 	if !strings.HasPrefix(stderr, "line 3: ") {
 		t.Errorf("stderr = %q, want the physical line number 3", stderr)
+	}
+}
+
+func TestJSONWhitespaceLinesAreIgnored(t *testing.T) {
+	input := " \t\n\r\n\t \r\n" + `{"tool":"delete_resource"}` + "\n"
+	code, stdout, stderr := evaluateInput(t, input)
+	if code != 0 {
+		t.Fatalf("exit code = %d (%s), want 0", code, stderr)
+	}
+	if lines := strings.Count(stdout, "\n"); lines != 1 || !strings.Contains(stdout, "tool_denied") {
+		t.Errorf("stdout = %q, want one tool_denied decision", stdout)
+	}
+}
+
+func TestUnicodeWhitespaceLineIsAnInputError(t *testing.T) {
+	tests := []struct {
+		name string
+		line string
+	}{
+		{"no-break space", "\u00a0"},
+		{"next line", "\u0085"},
+		{"line separator", "\u2028"},
+		{"ideographic space", "\u3000"},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			code, stdout, stderr := evaluateInput(t, "\n"+test.line+"\n")
+			if code != 2 {
+				t.Fatalf("exit code = %d, want 2", code)
+			}
+			if stdout != "" {
+				t.Errorf("stdout = %q, want empty", stdout)
+			}
+			if !strings.HasPrefix(stderr, "line 2: invalid tool call: ") {
+				t.Errorf("stderr = %q, want an input error on line 2", stderr)
+			}
+		})
+	}
+}
+
+func TestShapeErrorKeepsEarlierDecisions(t *testing.T) {
+	input := `{"tool":"delete_resource"}
+{"tool":null}
+{"tool":"delete_resource"}
+`
+	code, stdout, stderr := evaluateInput(t, input)
+	if code != 2 {
+		t.Fatalf("exit code = %d, want 2", code)
+	}
+	if !strings.HasPrefix(stderr, "line 2: invalid tool call: ") {
+		t.Errorf("stderr = %q, want line 2", stderr)
+	}
+	if lines := strings.Count(stdout, "\n"); lines != 1 {
+		t.Errorf("stdout = %q, want the one decision written before the bad line", stdout)
 	}
 }
 

@@ -16,6 +16,10 @@ import (
 // line.
 const maxNesting = 64
 
+// jsonWhitespace holds the only whitespace characters JSON allows around
+// values.
+const jsonWhitespace = " \t\r\n"
+
 // checkJSONStructure validates one input line before it is decoded: valid
 // UTF-8, exactly one JSON value, no duplicate object member at any depth,
 // nesting within the limit, and no Unicode escape that is not valid UTF-16.
@@ -148,6 +152,30 @@ func walkValue(decoder *json.Decoder, token json.Token, depth int) error {
 			return err
 		}
 	}
+}
+
+// checkToolCallShape rejects well-formed JSON that is not a tool call: the
+// top-level value must be an object, and a "tool" member, when present, must
+// be a string. Without this check, null and {"tool":null} decode into an
+// empty call and are denied as invalid_call instead of being reported as
+// input errors. The line must already have passed checkJSONStructure.
+func checkToolCallShape(line []byte) error {
+	value := bytes.TrimLeft(line, jsonWhitespace)
+	if len(value) == 0 || value[0] != '{' {
+		return errors.New("top-level value must be a JSON object")
+	}
+
+	// A struct matches the member name the same way as decoding the call.
+	var shape struct {
+		Tool json.RawMessage `json:"tool"`
+	}
+	if err := json.Unmarshal(value, &shape); err != nil {
+		return jsonError(err)
+	}
+	if shape.Tool != nil && shape.Tool[0] != '"' {
+		return errors.New(`field "tool" must be a JSON string`)
+	}
+	return nil
 }
 
 func jsonError(err error) error {
