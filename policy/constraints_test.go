@@ -228,6 +228,56 @@ func TestNumericTypes(t *testing.T) {
 	}
 }
 
+type (
+	TokenCount int64
+	BudgetSize uint64
+	Confidence float64
+)
+
+func TestNamedNumericTypes(t *testing.T) {
+	type label string
+	type flag bool
+	type wrappedNumber json.Number
+	tokens := TokenCount(5)
+	plain := int64(5)
+
+	tests := []struct {
+		name     string
+		argument string
+		value    any
+		want     string
+	}{
+		{"named int64", "free", TokenCount(5), codeAllowed},
+		{"named uint64", "free", BudgetSize(5), codeAllowed},
+		{"named float64", "free", Confidence(0.5), codeAllowed},
+		{"named int64 at safe integer limit", "free", TokenCount(safeInteger), codeAllowed},
+		{"named int64 beyond safe integer", "free", TokenCount(safeInteger + 1), codeArgumentTypeMismatch},
+		{"named int64 below negative safe integer", "free", TokenCount(-safeInteger - 1), codeArgumentTypeMismatch},
+		{"named uint64 beyond safe integer", "free", BudgetSize(safeInteger + 1), codeArgumentTypeMismatch},
+		{"named float64 beyond safe integer", "free", Confidence(float64(safeInteger) * 2), codeArgumentTypeMismatch},
+		{"named NaN", "free", Confidence(math.NaN()), codeArgumentTypeMismatch},
+		{"named positive infinity", "free", Confidence(math.Inf(1)), codeArgumentTypeMismatch},
+		{"named negative infinity", "free", Confidence(math.Inf(-1)), codeArgumentTypeMismatch},
+		{"pointer to named number", "free", &tokens, codeArgumentTypeMismatch},
+		{"pointer to built-in number", "free", &plain, codeArgumentTypeMismatch},
+		{"complex number", "free", complex(5, 0), codeArgumentTypeMismatch},
+		{"named string", "free", label("5"), codeArgumentTypeMismatch},
+		{"named boolean", "free", flag(true), codeArgumentTypeMismatch},
+		{"struct", "free", struct{ N int64 }{5}, codeArgumentTypeMismatch},
+		{"named json.Number", "free", wrappedNumber("5"), codeArgumentTypeMismatch},
+		{"json.Number", "free", json.Number("5"), codeAllowed},
+		{"json.Number beyond safe integer", "free", json.Number("9007199254740992"), codeArgumentTypeMismatch},
+		{"named number below minimum", "bounded", Confidence(0.5), codeNumberBelowMin},
+		{"named number above maximum", "bounded", TokenCount(11), codeNumberAboveMax},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			assertCode(t, evaluateArgument(t, "numbers", test.argument, test.value), test.want)
+		})
+	}
+}
+
 func TestNumericBounds(t *testing.T) {
 	tests := []struct {
 		name  string

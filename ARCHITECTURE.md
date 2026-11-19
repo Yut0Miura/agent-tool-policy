@@ -72,7 +72,7 @@ Every failure is a DENY decision with a code and a reason; `Evaluate` returns no
 
 Each argument has a type and the constraints that type allows. A present argument is checked in a fixed order: type, `max_length`, `enum`, `prefix`, `min`, `max`. Absent optional arguments are skipped; a supplied `null` is a wrong type.
 
-Numbers arrive as any Go numeric type or as `json.Number`. One helper normalizes them to `float64` after proving the value is finite and inside the exactly representable domain, so comparisons never depend on silent precision loss.
+Numbers arrive as a built-in Go integer or floating-point type, as a named type whose underlying type is one of them (for example `type TokenCount int64`), or as `json.Number`. Built-in and named types go through the same range checks and are normalized to `float64` only after the value is proven finite and inside the exactly representable domain, so comparisons never depend on silent precision loss. Named types are recognized by their `reflect.Kind`; pointers, complex numbers, strings, booleans, structs and other kinds are type mismatches. A `json.Number` is handled separately and keeps its exact decimal value; it is never read as a string kind.
 
 ## Authorization Budgets
 

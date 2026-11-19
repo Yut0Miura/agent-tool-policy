@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"math"
 	"math/big"
+	"reflect"
 	"strings"
 
 	yaml "go.yaml.in/yaml/v3"
@@ -95,9 +96,10 @@ func (number numericValue) compare(bound *numberBound) int {
 }
 
 // normalizeNumber converts a supported runtime numeric value for comparison
-// with policy bounds. It reports false for unsupported types, for NaN and
-// infinities, for malformed JSON numbers and for values outside the exact
-// comparison domain.
+// with policy bounds. Built-in numeric types and json.Number are matched
+// directly; named numeric types fall back to their reflect.Kind. It reports
+// false for unsupported types, for NaN and infinities, for malformed JSON
+// numbers and for values outside the exact comparison domain.
 func normalizeNumber(v any) (numericValue, bool) {
 	switch n := v.(type) {
 	case json.Number:
@@ -126,6 +128,26 @@ func normalizeNumber(v any) (numericValue, bool) {
 		return checkUint(uint64(n))
 	case uint64:
 		return checkUint(n)
+	default:
+		return normalizeNamedNumber(v)
+	}
+}
+
+// normalizeNamedNumber accepts a named type whose underlying type is a Go
+// integer or floating-point type, such as type TokenCount int64, and checks
+// it with the same rules as the built-in types. Pointers, complex numbers,
+// strings, booleans, structs and every other kind are not numbers. A
+// json.Number is handled before this fallback, so a string kind is never
+// read as a number here.
+func normalizeNamedNumber(v any) (numericValue, bool) {
+	value := reflect.ValueOf(v)
+	switch value.Kind() {
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		return checkInt(value.Int())
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		return checkUint(value.Uint())
+	case reflect.Float32, reflect.Float64:
+		return checkFloat(value.Float())
 	default:
 		return numericValue{}, false
 	}
