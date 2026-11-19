@@ -9,10 +9,14 @@ import (
 	yaml "go.yaml.in/yaml/v3"
 )
 
+// maxYAMLNesting is the deepest mapping or sequence nesting accepted in a
+// policy document.
+const maxYAMLNesting = 64
+
 // checkYAMLStructure enforces the structural rules of the policy format
 // before any value is decoded: exactly one document, no anchors, no aliases,
-// no merge keys, no explicit null values and no duplicate mapping key at any
-// level.
+// no merge keys, no explicit null values, no duplicate mapping key at any
+// level and nesting within the limit.
 func checkYAMLStructure(data []byte) error {
 	decoder := yaml.NewDecoder(bytes.NewReader(data))
 
@@ -33,10 +37,20 @@ func checkYAMLStructure(data []byte) error {
 		return fmt.Errorf("policy: %w", err)
 	}
 
-	return checkNode(&document)
+	return checkNode(&document, 0)
 }
 
-func checkNode(node *yaml.Node) error {
+// checkNode checks one node and its children. depth is the number of
+// mappings and sequences that enclose the node; the document node itself
+// does not count.
+func checkNode(node *yaml.Node, depth int) error {
+	if node.Kind == yaml.MappingNode || node.Kind == yaml.SequenceNode {
+		depth++
+		if depth > maxYAMLNesting {
+			return fmt.Errorf("policy: YAML nesting exceeds %d levels", maxYAMLNesting)
+		}
+	}
+
 	if node.Tag == "!!null" {
 		return errors.New("policy: explicit null values are not supported")
 	}
@@ -60,7 +74,7 @@ func checkNode(node *yaml.Node) error {
 	}
 
 	for _, child := range node.Content {
-		if err := checkNode(child); err != nil {
+		if err := checkNode(child, depth); err != nil {
 			return err
 		}
 	}

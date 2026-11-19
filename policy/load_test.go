@@ -106,6 +106,41 @@ func TestLoadRejectsOversizedPolicy(t *testing.T) {
 	}
 }
 
+// nestedYAML returns a document whose total mapping and sequence nesting,
+// the top-level mapping included, is depth.
+func nestedYAML(depth int, open, close string) string {
+	inner := strings.Repeat(open, depth-1) + "1" + strings.Repeat(close, depth-1)
+	return "version: 1\nnested: " + inner + "\n"
+}
+
+func TestYAMLNestingLimit(t *testing.T) {
+	containers := []struct {
+		name  string
+		open  string
+		close string
+	}{
+		{"sequences", "[", "]"},
+		{"mappings", "{a: ", "}"},
+	}
+
+	for _, container := range containers {
+		t.Run(container.name, func(t *testing.T) {
+			atLimit := nestedYAML(maxYAMLNesting, container.open, container.close)
+			if err := checkYAMLStructure([]byte(atLimit)); err != nil {
+				t.Errorf("%d levels: checkYAMLStructure() error = %v, want nil", maxYAMLNesting, err)
+			}
+
+			// The exact error shows that the depth is checked before the
+			// document is decoded, which would report the unknown field.
+			overLimit := nestedYAML(maxYAMLNesting+1, container.open, container.close)
+			_, err := Load([]byte(overLimit))
+			if err == nil || err.Error() != "policy: YAML nesting exceeds 64 levels" {
+				t.Errorf("%d levels: Load() error = %v, want the nesting limit", maxYAMLNesting+1, err)
+			}
+		})
+	}
+}
+
 func TestLoadFile(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "policy.yaml")
 	if err := os.WriteFile(path, []byte(validPolicy), 0o600); err != nil {
