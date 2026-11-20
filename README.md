@@ -211,6 +211,17 @@ if decision.Effect != policy.EffectAllow {
 
 `Engine` is immutable once loaded and safe for concurrent use, including creating independent `Run`s. A `Run` is safe for concurrent `Evaluate` calls, and its budgets can never be exceeded by a race; which goroutine receives the last available slot is not specified. `Evaluate` never returns an error and never mutates the caller's argument map.
 
+After `Evaluate`, a `Run` can report how much of its budgets is left:
+
+```go
+snapshot := run.BudgetSnapshot()
+
+globalLeft := snapshot.Global.Remaining
+toolLeft := snapshot.Tools["search_docs"].Remaining
+```
+
+`BudgetSnapshot` returns a consistent copy of the global budget and of the budget of every `allow` tool, each as `Limit`, `Used` and `Remaining`. Changing the returned map does not affect the `Run`, and the method is safe to call concurrently with `Evaluate`. A snapshot reserves nothing: a concurrent call may use the remaining budget before the next `Evaluate`.
+
 ## CLI Usage
 
 ```text

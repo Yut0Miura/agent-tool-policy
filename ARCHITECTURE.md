@@ -78,6 +78,8 @@ Numbers arrive as a built-in Go integer or floating-point type, as a named type 
 
 A `Run` holds the global counter and a per-tool counter, guarded by one mutex. Budgets count ALLOW decisions. The check and both increments happen in a single critical section, so concurrent calls cannot exceed a budget. There is no refund and no persistence: a new `Run` starts at zero.
 
+`BudgetSnapshot` copies the limits and counters under the same mutex, so the global and per-tool values in one snapshot come from the same moment. A snapshot is an observation of the current state, not a reservation of a future authorization: it holds no slot, and a concurrent `Evaluate` may consume the remaining budget before the caller acts on it.
+
 ## Concurrency
 
 `Engine` is read-only after loading and can be shared by any number of goroutines and `Run`s. A `Run` is safe for concurrent `Evaluate` calls. Determinism is a property of policy and state, not of scheduling: with the same engine, the same call and the same run state the decision is identical, but which goroutine takes the last available slot is not specified.

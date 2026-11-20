@@ -78,6 +78,49 @@ func (r *Run) Evaluate(call ToolCall) Decision {
 	return allow(call.Tool)
 }
 
+// BudgetUsage reports one authorization budget: its configured limit, the
+// slots consumed by ALLOW decisions so far and the slots still available.
+type BudgetUsage struct {
+	Limit     int
+	Used      int
+	Remaining int
+}
+
+// BudgetSnapshot is a point-in-time copy of the authorization budgets of a
+// Run. Tools has one entry for every tool whose effect is allow; denied tools
+// have no budget. The snapshot is independent of the Run: modifying it does
+// not change the Run, and later decisions do not change it.
+type BudgetSnapshot struct {
+	Global BudgetUsage
+	Tools  map[string]BudgetUsage
+}
+
+// BudgetSnapshot returns a consistent copy of the current budget usage of the
+// Run. It only observes state: it neither consumes nor reserves
+// authorization, so a later Evaluate may still be denied if concurrent calls
+// use the remaining slots first. It is safe to call concurrently with
+// Evaluate.
+func (r *Run) BudgetSnapshot() BudgetSnapshot {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	snapshot := BudgetSnapshot{
+		Global: budgetUsage(r.engine.globalMaxCalls, r.globalCalls),
+		Tools:  make(map[string]BudgetUsage, len(r.engine.tools)),
+	}
+	for name, tool := range r.engine.tools {
+		if tool.effect != EffectAllow {
+			continue
+		}
+		snapshot.Tools[name] = budgetUsage(tool.maxCalls, r.toolCalls[name])
+	}
+	return snapshot
+}
+
+func budgetUsage(limit, used int) BudgetUsage {
+	return BudgetUsage{Limit: limit, Used: used, Remaining: limit - used}
+}
+
 func quote(s string) string {
 	return `"` + s + `"`
 }
